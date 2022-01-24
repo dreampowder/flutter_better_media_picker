@@ -1,7 +1,11 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:media_picker/ui/common/media_thumbnail_cache.dart';
+import '../../model/model_media_picker_strings.dart';
+import '../common/media_thumbnail_cache.dart';
+import '../common/utils_asset_picker.dart';
+import 'screen_album_picker.dart';
+import 'widget_media_item.dart';
 import 'package:photo_manager/photo_manager.dart';
 
 class WidgetAssetImage extends StatefulWidget {

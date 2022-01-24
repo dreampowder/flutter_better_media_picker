@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:media_picker/model/model_media_picker_strings.dart';
-import 'package:media_picker/ui/common/media_thumbnail_cache.dart';
-import 'package:media_picker/ui/common/utils_asset_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
+import '../common/media_thumbnail_cache.dart';
+import '../common/utils_asset_picker.dart';
+import '../../model/model_media_picker_strings.dart';
 
 class ScreenAlbumPicker extends StatefulWidget {
 

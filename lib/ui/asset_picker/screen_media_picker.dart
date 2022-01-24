@@ -1,15 +1,14 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
-import 'package:media_picker/model/model_media_picker_strings.dart';
-import 'package:media_picker/ui/asset_picker/screen_album_picker.dart';
-import 'package:media_picker/ui/asset_picker/widget_media_item.dart';
-import 'package:media_picker/ui/common/media_thumbnail_cache.dart';
-import 'package:media_picker/ui/common/utils_asset_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
+import '../../model/model_media_picker_strings.dart';
+import '../common/media_thumbnail_cache.dart';
+import '../common/utils_asset_picker.dart';
+import 'screen_album_picker.dart';
+import 'widget_media_item.dart';
 
 enum MediaDownloadState{
   downlading, complete
