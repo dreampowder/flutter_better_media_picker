@@ -21,7 +21,10 @@ class MediaPicker {
       {List<AssetEntity>? selectedAssets,
         RequestType assetType = RequestType.common,
         int maxAssets = 1,
-        int crossAxisCount = 3}) {
+        int crossAxisCount = 3,
+        Function(MediaDownloadState state)? onDownloadMediaStateChanged,
+        Function(dynamic error)? onReceiveError,
+      }) {
     var completer = Completer<List<AssetEntity>?>();
     completer.complete(Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => ScreenMediaPicker(
@@ -29,6 +32,8 @@ class MediaPicker {
           crossAxisCount: crossAxisCount,
           selectedAssets: selectedAssets,
           requestType: assetType,
+          onDownloadMediaStateChanged: onDownloadMediaStateChanged,
+          onReceiveError: onReceiveError,
         ),
         fullscreenDialog: true)));
     return completer.future;
