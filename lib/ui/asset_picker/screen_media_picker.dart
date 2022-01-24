@@ -11,7 +11,7 @@ import 'screen_album_picker.dart';
 import 'widget_media_item.dart';
 
 enum MediaDownloadState{
-  downlading, complete
+  downlading, complete, error
 }
 
 class ScreenMediaPicker extends StatefulWidget {
@@ -21,7 +21,7 @@ class ScreenMediaPicker extends StatefulWidget {
   final RequestType requestType;
   final int pageSize;
   final MediaPickerStrings? localizedStrings;
-  final Function(MediaDownloadState state)? onDownloadMediaStateChanged;
+  final Function(MediaDownloadState state, dynamic error)? onDownloadMediaStateChanged;
   final Function(dynamic error)? onReceiveError;
   const ScreenMediaPicker(
       {this.crossAxisCount = 3,
@@ -146,17 +146,17 @@ class _ScreenMediaPickerState extends State<ScreenMediaPicker> {
     }else{
       MediaPickerUtils.debugPrint("There are medias that needs to be downloaded. Beginning Download");
       if(widget.onDownloadMediaStateChanged != null){
-        widget.onDownloadMediaStateChanged!(MediaDownloadState.downlading);
+        widget.onDownloadMediaStateChanged!(MediaDownloadState.downlading,null);
       }
       Future.wait(assets.map((e) => downloadAssetIfNeeded(e)))
       .catchError((error){
         MediaPickerUtils.debugPrint("Got error whlie downloading: $error");
-        if(widget.onReceiveError != null){
-          widget.onReceiveError!(error);
+        if(widget.onDownloadMediaStateChanged != null){
+          widget.onDownloadMediaStateChanged!(MediaDownloadState.error,error);
         }
       }).then((value){
         if(widget.onDownloadMediaStateChanged != null){
-          widget.onDownloadMediaStateChanged!(MediaDownloadState.complete);
+          widget.onDownloadMediaStateChanged!(MediaDownloadState.complete,null);
         }
         Navigator.of(context).pop(assets);
       });

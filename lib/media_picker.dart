@@ -22,7 +22,7 @@ class MediaPicker {
         RequestType assetType = RequestType.common,
         int maxAssets = 1,
         int crossAxisCount = 3,
-        Function(MediaDownloadState state)? onDownloadMediaStateChanged,
+        Function(MediaDownloadState state, dynamic error)? onDownloadMediaStateChanged,
         Function(dynamic error)? onReceiveError,
       }) {
     var completer = Completer<List<AssetEntity>?>();
