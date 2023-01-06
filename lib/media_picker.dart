@@ -46,8 +46,7 @@ class MediaPicker {
         Function(MediaDownloadState state, dynamic error)? onDownloadMediaStateChanged,
         Function(dynamic error)? onReceiveError,
       }) {
-    var completer = Completer<List<AssetEntity>?>();
-    completer.complete(Navigator.of(context).push(MaterialPageRoute(
+    return Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => ScreenMediaPicker(
           maxAssets: maxAssets,
           crossAxisCount: crossAxisCount,
@@ -56,8 +55,7 @@ class MediaPicker {
           onDownloadMediaStateChanged: onDownloadMediaStateChanged,
           onReceiveError: onReceiveError,
         ),
-        fullscreenDialog: true)));
-    return completer.future;
+        fullscreenDialog: true));
   }
 }
 
