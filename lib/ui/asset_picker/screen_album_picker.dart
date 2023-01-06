@@ -57,7 +57,7 @@ class _ScreenAlbumPickerState extends State<ScreenAlbumPicker> {
           completer.complete();
         }else{
           var asset = assets.first;
-          asset.thumbData.then((data) {
+          asset.thumbnailData.then((data) {
             _thumbnailCache.setCache(path.id, data);
             completer.complete();
           });

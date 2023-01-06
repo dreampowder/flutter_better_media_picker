@@ -1,8 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'dart:async';
 
 import 'package:flutter/services.dart';
-import 'package:media_picker/media_picker.dart';
+import 'package:flutter_better_media_picker/media_picker.dart';
 
 void main() {
   runApp(const MyApp());
@@ -30,8 +32,32 @@ class _MyAppState extends State<MyApp> {
   }
 }
 
-class ScreenMain extends StatelessWidget {
+class ScreenMain extends StatefulWidget {
   const ScreenMain({Key? key}) : super(key: key);
+
+  @override
+  State<ScreenMain> createState() => _ScreenMainState();
+}
+
+class _ScreenMainState extends State<ScreenMain> {
+
+  File? pickedFile;
+
+  void pickAsset(BuildContext context){
+    MediaPicker.pickAssets(
+      context,
+      maxAssets: 1,
+      assetType: MediaPickerAssetType.image,
+    ).then((value) async{
+      if(value?.isEmpty ?? true){
+        return;
+      }
+      pickedFile = await value!.first.file;
+      setState(() {
+
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,8 +65,13 @@ class ScreenMain extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Plugin example app'),
       ),
-      body: Center(
-        child: ElevatedButton(child: const Text("Show picker?"),onPressed: ()=>MediaPicker.pickAssets(context, maxAssets: 10),),
+      body: Column(
+        children: [
+          if(pickedFile !=null)Image.file(pickedFile!,height: 400,width: 400,fit: BoxFit.contain,),
+          Center(
+            child: ElevatedButton(child: const Text("Show picker?"),onPressed:()=>pickAsset(context),),
+          ),
+        ],
       ),
     );
   }

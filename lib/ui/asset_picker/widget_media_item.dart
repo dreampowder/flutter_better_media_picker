@@ -38,8 +38,8 @@ class _WidgetAssetImageState extends State<WidgetAssetImage> {
       var pixelRatio = MediaQuery.of(context).devicePixelRatio;
 
       return asset
-          .thumbDataWithSize(
-          (widget.size.width * pixelRatio).toInt(), (widget.size.height * pixelRatio).toInt(),
+      .thumbnailDataWithSize(
+          ThumbnailSize((widget.size.width * pixelRatio).toInt(), (widget.size.height * pixelRatio).toInt()),
           quality: 80)
           .then((value) {
         widget.thumbnailCache.setCache(asset.id, value);

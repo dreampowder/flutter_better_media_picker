@@ -7,8 +7,29 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
-
+export 'package:photo_manager/photo_manager.dart';
 import 'ui/asset_picker/screen_media_picker.dart';
+
+enum MediaPickerAssetType{
+  image, video, audio, all, common
+}
+
+extension _MediaPickerAssetTypeHelper on MediaPickerAssetType{
+  RequestType toRequest(){
+    switch(this){
+      case MediaPickerAssetType.image:
+        return RequestType.image;
+      case MediaPickerAssetType.video:
+        return RequestType.video;
+      case MediaPickerAssetType.audio:
+        return RequestType.audio;
+      case MediaPickerAssetType.all:
+        return RequestType.all;
+      case MediaPickerAssetType.common:
+        return RequestType.common;
+    }
+  }
+}
 
 class MediaPicker {
   ///Shows photo library / camera picker and lets usrs pick photos and videos
@@ -19,7 +40,7 @@ class MediaPicker {
   ///[crossAxisCount] number of rows to be shown in asset picker
   static Future<List<AssetEntity>?> pickAssets(BuildContext context,
       {List<AssetEntity>? selectedAssets,
-        RequestType assetType = RequestType.common,
+        MediaPickerAssetType assetType = MediaPickerAssetType.common,
         int maxAssets = 1,
         int crossAxisCount = 3,
         Function(MediaDownloadState state, dynamic error)? onDownloadMediaStateChanged,
@@ -31,7 +52,7 @@ class MediaPicker {
           maxAssets: maxAssets,
           crossAxisCount: crossAxisCount,
           selectedAssets: selectedAssets,
-          requestType: assetType,
+          requestType: assetType.toRequest(),
           onDownloadMediaStateChanged: onDownloadMediaStateChanged,
           onReceiveError: onReceiveError,
         ),

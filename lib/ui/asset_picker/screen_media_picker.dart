@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -11,7 +13,7 @@ import 'screen_album_picker.dart';
 import 'widget_media_item.dart';
 
 enum MediaDownloadState{
-  downlading, complete, error
+  downloading, complete, error
 }
 
 class ScreenMediaPicker extends StatefulWidget {
@@ -36,10 +38,10 @@ class ScreenMediaPicker extends StatefulWidget {
       }):super(key: key);
 
   @override
-  _ScreenMediaPickerState createState() => _ScreenMediaPickerState();
+  ScreenMediaPickerState createState() => ScreenMediaPickerState();
 }
 
-class _ScreenMediaPickerState extends State<ScreenMediaPicker> {
+class ScreenMediaPickerState extends State<ScreenMediaPicker> {
 
   static const maxPageSize = 50;
   final Set<int> requestedPages = {}; //Paging controller has a bug that it might fetches each page for multiple times.
@@ -64,7 +66,7 @@ class _ScreenMediaPickerState extends State<ScreenMediaPicker> {
     super.initState();
     selectedAssets = widget.selectedAssets ?? [];
     _initPagingController();
-    SchedulerBinding.instance?.addPostFrameCallback((timeStamp) => _initPhotoManager());
+    SchedulerBinding.instance.addPostFrameCallback((timeStamp) => _initPhotoManager());
   }
 
   void _initPhotoManager(){
@@ -94,6 +96,8 @@ class _ScreenMediaPickerState extends State<ScreenMediaPicker> {
   }
 
   void changeAlbum(AssetPathEntity album, bool forceRefresh){
+    debugPrint("Change Album");
+    currentAlbum = album;
     requestedPages.clear();
     _pagingController.refresh();
   }
@@ -104,7 +108,7 @@ class _ScreenMediaPickerState extends State<ScreenMediaPicker> {
         MediaPickerUtils.debugPrint("Already Requested page:$pageKey for album: ${currentAlbum?.name}");
         return;
       }
-      currentAlbum?.getAssetListPaged(pageKey, widget.pageSize).then((assets){
+      currentAlbum?.getAssetListPaged(page:pageKey,size: widget.pageSize).then((assets){
         if(assets.length < widget.pageSize){
           _pagingController.appendLastPage(assets);
         }else{
@@ -116,7 +120,13 @@ class _ScreenMediaPickerState extends State<ScreenMediaPicker> {
   }
 
   void _showAlbumPicker(){
-    Navigator.of(context).push(MaterialPageRoute(builder: (context)=>ScreenAlbumPicker(selectedAlbum: currentAlbum, thumbnailCache: _thumbnailCache, requestType: widget.requestType,), fullscreenDialog: true));
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (context)=>ScreenAlbumPicker(selectedAlbum: currentAlbum, thumbnailCache: _thumbnailCache, requestType: widget.requestType,), fullscreenDialog: true))
+        .then((value){
+          if(value is AssetPathEntity){
+            changeAlbum(value, true);
+          }
+    });
   }
 
   void _onSelectMedia(AssetEntity asset) async{
@@ -137,7 +147,7 @@ class _ScreenMediaPickerState extends State<ScreenMediaPicker> {
   void closeWithSelectedAssets(List<AssetEntity> assets) async{
     bool doesNeedsDownloading = false;
     for(int i = 0;i<assets.length; i++){
-      if((await assets[i].isLocallyAvailable) == false){
+      if((await assets[i].isLocallyAvailable()) == false){
         doesNeedsDownloading = true;
       }
     }
@@ -146,7 +156,7 @@ class _ScreenMediaPickerState extends State<ScreenMediaPicker> {
     }else{
       MediaPickerUtils.debugPrint("There are medias that needs to be downloaded. Beginning Download");
       if(widget.onDownloadMediaStateChanged != null){
-        widget.onDownloadMediaStateChanged!(MediaDownloadState.downlading,null);
+        widget.onDownloadMediaStateChanged!(MediaDownloadState.downloading,null);
       }
       Future.wait(assets.map((e) => downloadAssetIfNeeded(e)))
       .catchError((error){
@@ -164,15 +174,14 @@ class _ScreenMediaPickerState extends State<ScreenMediaPicker> {
   }
 
   Future<void> downloadAssetIfNeeded(AssetEntity asset) async{
-
-    var isLocallyAvailable = await asset.isLocallyAvailable;
+    var isLocallyAvailable =await asset.isLocallyAvailable();
     if(!isLocallyAvailable){
-      MediaPickerUtils.debugPrint("Downloading asset: ${asset}");
+      MediaPickerUtils.debugPrint("Downloading asset: $asset");
       var completer = Completer();
       asset.loadFile(
         isOrigin: true,
       ).then((value){
-        MediaPickerUtils.debugPrint("Download complete: ${asset}");
+        MediaPickerUtils.debugPrint("Download complete: $asset");
         completer.complete();
       }).catchError((error){
         completer.completeError(error);

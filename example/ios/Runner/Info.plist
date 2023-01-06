@@ -47,5 +47,7 @@
     <string>Need access to your gallery to save photos you have taken or received.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>App need your agree, can visit your album</string>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 </dict>
 </plist>
