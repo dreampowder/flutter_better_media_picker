@@ -108,6 +108,7 @@ class ScreenMediaPickerState extends State<ScreenMediaPicker> {
         MediaPickerUtils.debugPrint("Already Requested page:$pageKey for album: ${currentAlbum?.name}");
         return;
       }
+      requestedPages.add(pageKey);
       currentAlbum?.getAssetListPaged(page:pageKey,size: widget.pageSize).then((assets){
         if(assets.length < widget.pageSize){
           _pagingController.appendLastPage(assets);

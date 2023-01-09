@@ -49,6 +49,7 @@ class _ScreenMainState extends State<ScreenMain> {
       maxAssets: 1,
       assetType: MediaPickerAssetType.image,
     ).then((value) async{
+      debugPrint("Completed");
       if(value?.isEmpty ?? true){
         return;
       }
