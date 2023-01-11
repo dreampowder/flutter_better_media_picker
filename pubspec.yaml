@@ -1,7 +1,7 @@
 name: flutter_better_media_picker
 description: A new flutter plugin project.
-version: 0.0.1
-homepage:
+version: 0.0.4
+homepage: https://github.com/dreampowder/flutter_better_media_picker
 
 environment:
   sdk: ">=2.15.1 <3.0.0"

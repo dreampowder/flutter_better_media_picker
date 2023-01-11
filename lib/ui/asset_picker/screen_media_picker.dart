@@ -54,6 +54,8 @@ class ScreenMediaPickerState extends State<ScreenMediaPicker> {
 
   final MediaThumbnailCache _thumbnailCache = MediaThumbnailCache();
 
+  bool? didGivePermission;
+
   @override
   void dispose() {
     PhotoManager.stopChangeNotify();
@@ -69,30 +71,40 @@ class ScreenMediaPickerState extends State<ScreenMediaPicker> {
     SchedulerBinding.instance.addPostFrameCallback((timeStamp) => _initPhotoManager());
   }
 
-  void _initPhotoManager(){
-    PhotoManager.addChangeCallback((value) {
-      if(currentAlbum == null){
-        return;
-      }
-      changeAlbum(currentAlbum!, true);
-    });
-    PhotoManager.startChangeNotify();
-    PhotoManager.getAssetPathList(hasAll: true,type: widget.requestType)
-    .then((albums){
-      setState(() {
-        this.albums.clear();
-        this.albums.addAll(albums);
-        var albumIndex = albums.indexWhere((album) => album.isAll);
-        if(albumIndex == -1){
-          albumIndex = 0;
+  void _initPhotoManager() async{
+    final PermissionState _ps = await PhotoManager.requestPermissionExtend();
+    if (_ps.hasAccess) {
+      PhotoManager.addChangeCallback((value) {
+        if(currentAlbum == null){
+          return;
         }
-        if(albums.isNotEmpty){
-          currentAlbum = albums[albumIndex];
-        }else{
-          _pagingController.appendLastPage([]);
-        }
+        changeAlbum(currentAlbum!, true);
       });
-    });
+      PhotoManager.startChangeNotify();
+      PhotoManager.getAssetPathList(hasAll: true,type: widget.requestType)
+          .then((albums){
+        setState(() {
+          this.albums.clear();
+          this.albums.addAll(albums);
+          var albumIndex = albums.indexWhere((album) => album.isAll);
+          if(albumIndex == -1){
+            albumIndex = 0;
+          }
+          if(albums.isNotEmpty){
+            currentAlbum = albums[albumIndex];
+          }else{
+            _pagingController.appendLastPage([]);
+          }
+        });
+      });
+      setState(() {
+        didGivePermission = true;
+      });
+    } else {
+      setState(() {
+        didGivePermission = false;
+      });
+    }
   }
 
   void changeAlbum(AssetPathEntity album, bool forceRefresh){
@@ -224,7 +236,10 @@ class ScreenMediaPickerState extends State<ScreenMediaPicker> {
     ],
   );
 
-  Widget get _body =>Container(
+  Widget get _body =>
+      didGivePermission == null ?  _loading() :
+      didGivePermission! == false ? _noAccess() :
+      Container(
     child: albums.isEmpty ? Container() : PagedGridView<int,AssetEntity>(
         pagingController: _pagingController,
         builderDelegate: PagedChildBuilderDelegate<AssetEntity>(
@@ -235,6 +250,27 @@ class ScreenMediaPickerState extends State<ScreenMediaPicker> {
         )
     ),
   );
+
+  Widget _loading(){
+    return const Center(child: CircularProgressIndicator(),);
+  }
+
+  Widget _noAccess(){
+    return Center(
+      child: Column(
+        children: [
+          Text(widget.localizedStrings?.noPermissionTitle ?? "Cannot access to library", style: Theme.of(context).textTheme.titleMedium,),
+          const SizedBox(height: 8,),
+          Text(widget.localizedStrings?.noPermissionDescription ?? "You must give permission in order to pick photos.\nPlease give permission from settings ",),
+          const SizedBox(height: 8,),
+          ElevatedButton(onPressed: () async{
+            Navigator.of(context).pop();
+            await PhotoManager.openSetting();
+          }, child: Text(widget.localizedStrings?.openSettings ?? "Open Settings"))
+        ],
+      ),
+    );
+  }
 
   Widget _assetThumbnail(AssetEntity asset) {
     var width = MediaQuery.of(context).size.width / widget.crossAxisCount;
