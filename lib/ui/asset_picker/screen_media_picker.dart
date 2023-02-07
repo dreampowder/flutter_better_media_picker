@@ -55,10 +55,18 @@ class ScreenMediaPickerState extends State<ScreenMediaPicker> {
   final MediaThumbnailCache _thumbnailCache = MediaThumbnailCache();
 
   bool? didGivePermission;
+  bool didStartChangeNotify = false;
 
   @override
   void dispose() {
-    PhotoManager.stopChangeNotify();
+    try{
+      if (didStartChangeNotify) {
+        PhotoManager.stopChangeNotify();
+      }
+    }catch(exception){
+      debugPrint("Change Notify");
+    }
+
     super.dispose();
   }
 
@@ -81,6 +89,8 @@ class ScreenMediaPickerState extends State<ScreenMediaPicker> {
         changeAlbum(currentAlbum!, true);
       });
       PhotoManager.startChangeNotify();
+      didStartChangeNotify = true;
+
       PhotoManager.getAssetPathList(hasAll: true,type: widget.requestType)
           .then((albums){
         setState(() {
