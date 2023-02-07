@@ -29,17 +29,25 @@ class _ScreenAlbumPickerState extends State<ScreenAlbumPicker> {
     super.initState();
 
     _thumbnailCache = widget.thumbnailCache ?? MediaThumbnailCache();
+    initPhotoManager();
+  }
 
-    PhotoManager.getAssetPathList(hasAll: true, type: widget.requestType).then((albums){
-      var allAssetsIndex = albums.indexWhere((e) => e.isAll);
-      if (allAssetsIndex != -1) {
-        var allAssets = albums[allAssetsIndex];
-        albums.removeAt(allAssetsIndex);
-        albums.insert(0, allAssets);
-      }
-    getAllAssetPathImages(albums);
-      _completer.complete(albums);
-    });
+  void initPhotoManager() async{
+    final PermissionState ps = await PhotoManager.requestPermissionExtend();
+    if (ps.hasAccess) {
+      PhotoManager.getAssetPathList(hasAll: true, type: widget.requestType).then((albums){
+        var allAssetsIndex = albums.indexWhere((e) => e.isAll);
+        if (allAssetsIndex != -1) {
+          var allAssets = albums[allAssetsIndex];
+          albums.removeAt(allAssetsIndex);
+          albums.insert(0, allAssets);
+        }
+        getAllAssetPathImages(albums);
+        _completer.complete(albums);
+      });
+    }else{
+      _completer.complete([]);
+    }
   }
 
   Future<void> getAllAssetPathImages(List<AssetPathEntity> allAssetPaths){

@@ -72,8 +72,8 @@ class ScreenMediaPickerState extends State<ScreenMediaPicker> {
   }
 
   void _initPhotoManager() async{
-    final PermissionState _ps = await PhotoManager.requestPermissionExtend();
-    if (_ps.hasAccess) {
+    final PermissionState ps = await PhotoManager.requestPermissionExtend();
+    if (ps.hasAccess) {
       PhotoManager.addChangeCallback((value) {
         if(currentAlbum == null){
           return;
