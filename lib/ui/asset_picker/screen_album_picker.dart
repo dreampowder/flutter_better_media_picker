@@ -51,7 +51,11 @@ class _ScreenAlbumPickerState extends State<ScreenAlbumPicker> {
   }
 
   Future<void> getAllAssetPathImages(List<AssetPathEntity> allAssetPaths){
-    return Future.wait((allAssetPaths).map((path)=>getPathThumbnail(path).then((value) => setState((){}))));
+    return Future.wait((allAssetPaths).map((path)=>getPathThumbnail(path).then((value){
+      if (mounted) {
+        setState((){});
+      }
+    })));
   }
 
   Future<void> getPathThumbnail(AssetPathEntity path){
