@@ -7,8 +7,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
-export 'package:photo_manager/photo_manager.dart';
+
 import 'ui/asset_picker/screen_media_picker.dart';
+
+export 'package:photo_manager/photo_manager.dart';
 
 enum MediaPickerAssetType{
   image, video, audio, all, common

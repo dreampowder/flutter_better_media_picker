@@ -3,9 +3,10 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
+
+import '../../model/model_media_picker_strings.dart';
 import '../common/media_thumbnail_cache.dart';
 import '../common/utils_asset_picker.dart';
-import '../../model/model_media_picker_strings.dart';
 
 class ScreenAlbumPicker extends StatefulWidget {
 
@@ -16,10 +17,10 @@ class ScreenAlbumPicker extends StatefulWidget {
   const ScreenAlbumPicker({Key? key, required this.selectedAlbum, required this.thumbnailCache, this.localizedStrings, this.requestType = RequestType.common}) : super(key: key);
 
   @override
-  _ScreenAlbumPickerState createState() => _ScreenAlbumPickerState();
+  ScreenAlbumPickerState createState() => ScreenAlbumPickerState();
 }
 
-class _ScreenAlbumPickerState extends State<ScreenAlbumPicker> {
+class ScreenAlbumPickerState extends State<ScreenAlbumPicker> {
 
   late final MediaThumbnailCache _thumbnailCache;
   final Completer<List<AssetPathEntity>> _completer = Completer();

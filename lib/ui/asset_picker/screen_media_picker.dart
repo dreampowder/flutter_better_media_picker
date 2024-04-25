@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:photo_manager/photo_manager.dart';
+
 import '../../model/model_media_picker_strings.dart';
 import '../common/media_thumbnail_cache.dart';
 import '../common/utils_asset_picker.dart';
@@ -187,6 +188,7 @@ class ScreenMediaPickerState extends State<ScreenMediaPicker> {
         if(widget.onDownloadMediaStateChanged != null){
           widget.onDownloadMediaStateChanged!(MediaDownloadState.error,error);
         }
+        return Future.value([]);
       }).then((value){
         if(widget.onDownloadMediaStateChanged != null){
           widget.onDownloadMediaStateChanged!(MediaDownloadState.complete,null);

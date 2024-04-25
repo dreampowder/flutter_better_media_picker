@@ -1,12 +1,9 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import '../../model/model_media_picker_strings.dart';
-import '../common/media_thumbnail_cache.dart';
-import '../common/utils_asset_picker.dart';
-import 'screen_album_picker.dart';
-import 'widget_media_item.dart';
 import 'package:photo_manager/photo_manager.dart';
+
+import '../common/media_thumbnail_cache.dart';
 
 class WidgetAssetImage extends StatefulWidget {
   final AssetEntity asset;
@@ -22,10 +19,10 @@ class WidgetAssetImage extends StatefulWidget {
   }):super(key: key);
 
   @override
-  _WidgetAssetImageState createState() => _WidgetAssetImageState();
+  WidgetAssetImageState createState() => WidgetAssetImageState();
 }
 
-class _WidgetAssetImageState extends State<WidgetAssetImage> {
+class WidgetAssetImageState extends State<WidgetAssetImage> {
   @override
   void initState() {
     super.initState();
@@ -65,11 +62,11 @@ class _WidgetAssetImageState extends State<WidgetAssetImage> {
       future: getAssetThumbnail(widget.asset),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          print("Snapshot error: ${snapshot.error}");
+          debugPrint("Snapshot error: ${snapshot.error}");
         }
         return AnimatedOpacity(
           opacity: snapshot.connectionState != ConnectionState.done ? 0.0 : 1.0,
-          duration: Duration(milliseconds: 100),
+          duration: const Duration(milliseconds: 100),
           child: (!snapshot.hasError && snapshot.hasData)
               ? _content(snapshot.data!)
               : Container(),
