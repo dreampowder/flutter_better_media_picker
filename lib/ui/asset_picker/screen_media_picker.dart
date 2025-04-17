@@ -45,8 +45,17 @@ class ScreenMediaPicker extends StatefulWidget {
 class ScreenMediaPickerState extends State<ScreenMediaPicker> {
 
   static const maxPageSize = 50;
-  final Set<int> requestedPages = {}; //Paging controller has a bug that it might fetches each page for multiple times.
-  final PagingController<int,AssetEntity> _pagingController = PagingController<int,AssetEntity>(firstPageKey: 0);
+
+  late final PagingController<int,AssetEntity> _pagingController = PagingController(
+      getNextPageKey: (PagingState<int, AssetEntity> state){
+        final  page = (state.keys?.last ?? 0) + 1;
+        if (page > 1 && (state.pages?.last ?? []).isEmpty) {
+          return null;
+        }
+        return page;
+      },
+      fetchPage: _fetchNextPage
+  );
 
   final List<AssetPathEntity> albums = [];
   AssetPathEntity? currentAlbum;
@@ -60,6 +69,7 @@ class ScreenMediaPickerState extends State<ScreenMediaPicker> {
 
   @override
   void dispose() {
+    debugPrint("Dispose called");
     try{
       if (didStartChangeNotify) {
         PhotoManager.stopChangeNotify();
@@ -76,7 +86,7 @@ class ScreenMediaPickerState extends State<ScreenMediaPicker> {
   void initState() {
     super.initState();
     selectedAssets = widget.selectedAssets ?? [];
-    _initPagingController();
+    // _initPagingController();
     SchedulerBinding.instance.addPostFrameCallback((timeStamp) => _initPhotoManager());
   }
 
@@ -103,8 +113,6 @@ class ScreenMediaPickerState extends State<ScreenMediaPicker> {
           }
           if(albums.isNotEmpty){
             currentAlbum = albums[albumIndex];
-          }else{
-            _pagingController.appendLastPage([]);
           }
         });
       });
@@ -120,28 +128,44 @@ class ScreenMediaPickerState extends State<ScreenMediaPicker> {
 
   void changeAlbum(AssetPathEntity album, bool forceRefresh){
     debugPrint("Change Album");
-    currentAlbum = album;
-    requestedPages.clear();
+    if (currentAlbum == album) {
+      debugPrint("SAME CHANGE ALBUM CALLED, IGNORING");
+      return;
+    }
+    setState(() {
+      currentAlbum = album;
+    });
     _pagingController.refresh();
   }
 
-  void _initPagingController(){
-    _pagingController.addPageRequestListener((pageKey) {
-      if(requestedPages.contains(pageKey)){
-        MediaPickerUtils.debugPrint("Already Requested page:$pageKey for album: ${currentAlbum?.name}");
-        return;
-      }
-      requestedPages.add(pageKey);
-      currentAlbum?.getAssetListPaged(page:pageKey,size: widget.pageSize).then((assets){
-        if(assets.length < widget.pageSize){
-          _pagingController.appendLastPage(assets);
-        }else{
-          _pagingController.nextPageKey = pageKey + 1;
-          _pagingController.appendPage(assets, _pagingController.nextPageKey);
-        }
-      });
+
+  FutureOr<List<AssetEntity>> _fetchNextPage(int pageKey) {
+    debugPrint("Getting Next Page: $pageKey -> $currentAlbum");
+    var completer = Completer<List<AssetEntity>>();
+    currentAlbum?.getAssetListPaged(page:pageKey,size: widget.pageSize).then((assets){
+      debugPrint("GOT Assets: ${assets.length} -> ${_pagingController.hasNextPage}");
+      completer.complete(assets);
     });
+    return completer.future;
   }
+
+  // void _initPagingController(){
+  //   _pagingController.addPageRequestListener((pageKey) {
+  //     if(requestedPages.contains(pageKey)){
+  //       MediaPickerUtils.debugPrint("Already Requested page:$pageKey for album: ${currentAlbum?.name}");
+  //       return;
+  //     }
+  //     requestedPages.add(pageKey);
+  //     currentAlbum?.getAssetListPaged(page:pageKey,size: widget.pageSize).then((assets){
+  //       if(assets.length < widget.pageSize){
+  //         _pagingController.appendLastPage(assets);
+  //       }else{
+  //         _pagingController.nextPageKey = pageKey + 1;
+  //         _pagingController.appendPage(assets, _pagingController.nextPageKey);
+  //       }
+  //     });
+  //   });
+  // }
 
   void _showAlbumPicker(){
     Navigator.of(context)
@@ -252,15 +276,22 @@ class ScreenMediaPickerState extends State<ScreenMediaPicker> {
       didGivePermission == null ?  _loading() :
       didGivePermission! == false ? _noAccess() :
       Container(
-    child: albums.isEmpty ? Container() : PagedGridView<int,AssetEntity>(
-        pagingController: _pagingController,
-        builderDelegate: PagedChildBuilderDelegate<AssetEntity>(
-          itemBuilder: (context, item, index) => _assetThumbnail(item),
-        ),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: widget.crossAxisCount,
-        )
-    ),
+    child: albums.isEmpty ? Container() : PagingListener(
+        controller: _pagingController,
+        builder: (context, state, fetchNextPage){
+          debugPrint("State: ${state.isLoading}, ${state.hasNextPage}, ${state.status}");
+          return PagedGridView(
+              state: state,
+              fetchNextPage: fetchNextPage,
+              builderDelegate: PagedChildBuilderDelegate<AssetEntity>(
+                itemBuilder: (context, item, index) => _assetThumbnail(item),
+              ),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: widget.crossAxisCount,
+              )
+          );
+        }
+    )
   );
 
   Widget _loading(){

@@ -36,15 +36,24 @@ class ScreenAlbumPickerState extends State<ScreenAlbumPicker> {
   void initPhotoManager() async{
     final PermissionState ps = await PhotoManager.requestPermissionExtend();
     if (ps.hasAccess) {
-      PhotoManager.getAssetPathList(hasAll: true, type: widget.requestType).then((albums){
-        var allAssetsIndex = albums.indexWhere((e) => e.isAll);
-        if (allAssetsIndex != -1) {
-          var allAssets = albums[allAssetsIndex];
-          albums.removeAt(allAssetsIndex);
-          albums.insert(0, allAssets);
+      PhotoManager.getAssetPathList(hasAll: true, type: widget.requestType).then((albums) async{
+
+        List<AssetPathEntity> nonEmptyAlbums = [];
+        for (var value in albums) {
+          var count = await value.assetCountAsync;
+          if (count > 0 || value.isAll) {
+            nonEmptyAlbums.add(value);
+          }
         }
-        getAllAssetPathImages(albums);
-        _completer.complete(albums);
+
+        var allAssetsIndex = nonEmptyAlbums.indexWhere((e) => e.isAll);
+        if (allAssetsIndex != -1) {
+          var allAssets = nonEmptyAlbums[allAssetsIndex];
+          nonEmptyAlbums.removeAt(allAssetsIndex);
+          nonEmptyAlbums.insert(0, allAssets);
+        }
+        getAllAssetPathImages(nonEmptyAlbums);
+        _completer.complete(nonEmptyAlbums);
       });
     }else{
       _completer.complete([]);
