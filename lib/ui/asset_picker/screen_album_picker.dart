@@ -8,148 +8,120 @@ import '../../model/model_media_picker_strings.dart';
 import '../common/media_thumbnail_cache.dart';
 import '../common/utils_asset_picker.dart';
 
+/// Album list. Pushed by [ScreenMediaPicker] after library access is granted,
+/// so it does not request permission itself.
 class ScreenAlbumPicker extends StatefulWidget {
-
   final AssetPathEntity? selectedAlbum;
   final MediaThumbnailCache? thumbnailCache;
   final MediaPickerStrings? localizedStrings;
   final RequestType requestType;
-  const ScreenAlbumPicker({Key? key, required this.selectedAlbum, required this.thumbnailCache, this.localizedStrings, this.requestType = RequestType.common}) : super(key: key);
+  final void Function(Object error)? onReceiveError;
+
+  const ScreenAlbumPicker({
+    super.key,
+    required this.selectedAlbum,
+    required this.thumbnailCache,
+    this.localizedStrings,
+    this.requestType = RequestType.common,
+    this.onReceiveError,
+  });
 
   @override
   ScreenAlbumPickerState createState() => ScreenAlbumPickerState();
 }
 
 class ScreenAlbumPickerState extends State<ScreenAlbumPicker> {
+  late final MediaThumbnailCache _thumbnailCache = widget.thumbnailCache ?? MediaThumbnailCache();
+  late final Future<List<AssetPathEntity>> _albums = _loadAlbums();
 
-  late final MediaThumbnailCache _thumbnailCache;
-  final Completer<List<AssetPathEntity>> _completer = Completer();
+  /// Album ids share the cache with asset ids; on Android both are numeric.
+  static String _cacheKey(AssetPathEntity path) => "album:${path.id}";
 
-  @override
-  void initState() {
-    super.initState();
-
-    _thumbnailCache = widget.thumbnailCache ?? MediaThumbnailCache();
-    initPhotoManager();
-  }
-
-  void initPhotoManager() async{
-    final PermissionState ps = await PhotoManager.requestPermissionExtend();
-    if (ps.hasAccess) {
-      PhotoManager.getAssetPathList(hasAll: true, type: widget.requestType).then((albums) async{
-
-        List<AssetPathEntity> nonEmptyAlbums = [];
-        for (var value in albums) {
-          var count = await value.assetCountAsync;
-          if (count > 0 || value.isAll) {
-            nonEmptyAlbums.add(value);
-          }
+  Future<List<AssetPathEntity>> _loadAlbums() async {
+    try {
+      final paths = await PhotoManager.getAssetPathList(hasAll: true, type: widget.requestType);
+      final albums = <AssetPathEntity>[];
+      for (final path in paths) {
+        if (path.isAll || await path.assetCountAsync > 0) {
+          albums.add(path);
         }
-
-        var allAssetsIndex = nonEmptyAlbums.indexWhere((e) => e.isAll);
-        if (allAssetsIndex != -1) {
-          var allAssets = nonEmptyAlbums[allAssetsIndex];
-          nonEmptyAlbums.removeAt(allAssetsIndex);
-          nonEmptyAlbums.insert(0, allAssets);
-        }
-        getAllAssetPathImages(nonEmptyAlbums);
-        _completer.complete(nonEmptyAlbums);
-      });
-    }else{
-      _completer.complete([]);
-    }
-  }
-
-  Future<void> getAllAssetPathImages(List<AssetPathEntity> allAssetPaths){
-    return Future.wait((allAssetPaths).map((path)=>getPathThumbnail(path).then((value){
-      if (mounted) {
-        setState((){});
       }
-    })));
+      final allIndex = albums.indexWhere((e) => e.isAll);
+      if (allIndex > 0) {
+        albums.insert(0, albums.removeAt(allIndex));
+      }
+      for (final album in albums) {
+        unawaited(_loadThumbnail(album));
+      }
+      return albums;
+    } catch (error) {
+      MediaPickerUtils.debugPrint("Error loading albums: $error");
+      widget.onReceiveError?.call(error);
+      rethrow;
+    }
   }
 
-  Future<void> getPathThumbnail(AssetPathEntity path){
-    var completer = Completer();
-    if(_thumbnailCache.hasKey(path.id)){
-      completer.complete();
-    }else{
-      path.getAssetListRange(start: 0, end: 1).then((assets) {
-        if(assets.isEmpty){
-          _thumbnailCache.setCache(path.id, Uint8List(0));
-          completer.complete();
-        }else{
-          var asset = assets.first;
-          asset.thumbnailData.then((data) {
-            _thumbnailCache.setCache(path.id, data);
-            completer.complete();
-          });
-        }
-      }).catchError((error){
-        MediaPickerUtils.debugPrint("Error getting asset path album thumbnail: $error");
-      });
+  Future<void> _loadThumbnail(AssetPathEntity path) async {
+    final key = _cacheKey(path);
+    if (_thumbnailCache.hasKey(key)) return;
+    Uint8List? data;
+    try {
+      final assets = await path.getAssetListRange(start: 0, end: 1);
+      if (assets.isNotEmpty) {
+        data = await assets.first.thumbnailData;
+      }
+    } catch (error) {
+      MediaPickerUtils.debugPrint("Error getting album thumbnail: $error");
     }
-    return completer.future;
+    _thumbnailCache.setCache(key, data);
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: _appBar,
-      body: _body,
+      appBar: AppBar(
+        title: Text(widget.localizedStrings?.albums ?? "Albums"),
+      ),
+      body: FutureBuilder<List<AssetPathEntity>>(
+        future: _albums,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Text(widget.localizedStrings?.alertTitleError ?? "Couldn't load albums"),
+            );
+          }
+          final albums = snapshot.data!;
+          return ListView.builder(
+            itemCount: albums.length,
+            itemBuilder: (context, index) {
+              final path = albums[index];
+              return ListTile(
+                leading: _thumbnail(path),
+                title: Text(path.name),
+                trailing: path.id != widget.selectedAlbum?.id
+                    ? null
+                    : Icon(Icons.check_circle, color: Theme.of(context).colorScheme.secondary),
+                onTap: () => Navigator.of(context).pop(path),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
-  AppBar get _appBar => AppBar(
-    title: Text(
-      widget.localizedStrings?.albums ?? "Albums",
-    ),
-  );
-
-  Widget get _body => FutureBuilder<List<AssetPathEntity>>(
-    future: _completer.future,
-    builder: (context, snapshot){
-      if(snapshot.connectionState != ConnectionState.done){
-        return const Center(
-          child: CircularProgressIndicator(),
-        );
-      }else if(snapshot.hasError){
-        return ErrorWidget(snapshot.error ?? "Error loading snapshot");
-      }
-      return ListView.builder(
-        itemCount: snapshot.data?.length ?? 0,
-        itemBuilder: (context, index){
-          var path = snapshot.data![index];
-          return ListTile(
-            leading: getThumbnail(path),
-            title: Text(path.name),
-            trailing: (path.id != widget.selectedAlbum?.id)
-                ? null
-                : Icon(
-                  Icons.check_circle,
-                  color: Theme.of(context).colorScheme.secondary,
-                ),
-            onTap: () => Navigator.of(context).pop(path),
-          );
-        });
-    },
-  );
-
-  Widget getThumbnail(AssetPathEntity path) {
-    var thumbnailData = widget.thumbnailCache?.getData(path.id);
-    if(thumbnailData == null || thumbnailData.isEmpty){
-      return const SizedBox(
-        width: 40,
-        height: 40,
-        child: Icon(Icons.photo),
-      );
+  Widget _thumbnail(AssetPathEntity path) {
+    final data = _thumbnailCache.getData(_cacheKey(path));
+    if (data == null || data.isEmpty) {
+      return const SizedBox(width: 40, height: 40, child: Icon(Icons.photo));
     }
     return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.memory(
-          thumbnailData,
-          width: 40,
-          height: 40,
-          fit: BoxFit.cover,
-        ));
+      borderRadius: BorderRadius.circular(8),
+      child: Image.memory(data, width: 40, height: 40, fit: BoxFit.cover),
+    );
   }
 }

@@ -1,9 +1,8 @@
-// ignore_for_file: use_build_context_synchronously
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:photo_manager/photo_manager.dart';
 
@@ -13,9 +12,7 @@ import '../common/utils_asset_picker.dart';
 import 'screen_album_picker.dart';
 import 'widget_media_item.dart';
 
-enum MediaDownloadState{
-  downloading, complete, error
-}
+enum MediaDownloadState { downloading, complete, error }
 
 class ScreenMediaPicker extends StatefulWidget {
   final List<AssetEntity>? selectedAssets;
@@ -24,220 +21,214 @@ class ScreenMediaPicker extends StatefulWidget {
   final RequestType requestType;
   final int pageSize;
   final MediaPickerStrings? localizedStrings;
-  final Function(MediaDownloadState state, dynamic error)? onDownloadMediaStateChanged;
-  final Function(dynamic error)? onReceiveError;
-  const ScreenMediaPicker(
-      {this.crossAxisCount = 3,
-        this.maxAssets = 5,
-        this.selectedAssets,
-        this.requestType = RequestType.common,
-        this.pageSize = 50,
-        this.localizedStrings,
-        this.onDownloadMediaStateChanged,
-        this.onReceiveError,
-        Key? key,
-      }):super(key: key);
+  final void Function(MediaDownloadState state, Object? error)? onDownloadMediaStateChanged;
+  final void Function(Object error)? onReceiveError;
+
+  /// Replaces the built-in photo_manager permission request when set.
+  /// Must resolve to `true` when the library can be read.
+  final Future<bool> Function()? permissionHandler;
+
+  const ScreenMediaPicker({
+    this.crossAxisCount = 3,
+    this.maxAssets = 5,
+    this.selectedAssets,
+    this.requestType = RequestType.common,
+    this.pageSize = 50,
+    this.localizedStrings,
+    this.onDownloadMediaStateChanged,
+    this.onReceiveError,
+    this.permissionHandler,
+    super.key,
+  }) : assert(pageSize > 0),
+       assert(maxAssets > 0);
 
   @override
   ScreenMediaPickerState createState() => ScreenMediaPickerState();
 }
 
 class ScreenMediaPickerState extends State<ScreenMediaPicker> {
-
-  static const maxPageSize = 50;
-
-  late final PagingController<int,AssetEntity> _pagingController = PagingController(
-      getNextPageKey: (PagingState<int, AssetEntity> state){
-        final  page = (state.keys?.last ?? 0) + 1;
-        if (page > 1 && (state.pages?.last ?? []).isEmpty) {
-          return null;
-        }
-        return page;
-      },
-      fetchPage: _fetchNextPage
+  late final PagingController<int, AssetEntity> _pagingController = PagingController(
+    getNextPageKey: MediaPickerUtils.nextPageKey,
+    fetchPage: _fetchPage,
   );
 
   final List<AssetPathEntity> albums = [];
   AssetPathEntity? currentAlbum;
 
-  late List<AssetEntity> selectedAssets;
+  late final List<AssetEntity> selectedAssets = [...?widget.selectedAssets];
 
   final MediaThumbnailCache _thumbnailCache = MediaThumbnailCache();
 
   bool? didGivePermission;
-  bool didStartChangeNotify = false;
-
-  @override
-  void dispose() {
-    debugPrint("Dispose called");
-    try{
-      if (didStartChangeNotify) {
-        PhotoManager.stopChangeNotify();
-      }
-    }catch(exception){
-      debugPrint("Change Notify");
-    }
-
-    super.dispose();
-  }
-
+  bool _didStartChangeNotify = false;
+  bool _isClosing = false;
 
   @override
   void initState() {
     super.initState();
-    selectedAssets = widget.selectedAssets ?? [];
-    // _initPagingController();
-    SchedulerBinding.instance.addPostFrameCallback((timeStamp) => _initPhotoManager());
+    SchedulerBinding.instance.addPostFrameCallback((_) => _initPhotoManager());
   }
 
-  void _initPhotoManager() async{
-    final PermissionState ps = await PhotoManager.requestPermissionExtend();
-    if (ps.hasAccess) {
-      PhotoManager.addChangeCallback((value) {
-        if(currentAlbum == null){
-          return;
-        }
-        changeAlbum(currentAlbum!, true);
-      });
-      PhotoManager.startChangeNotify();
-      didStartChangeNotify = true;
-
-      PhotoManager.getAssetPathList(hasAll: true,type: widget.requestType)
-          .then((albums){
-        setState(() {
-          this.albums.clear();
-          this.albums.addAll(albums);
-          var albumIndex = albums.indexWhere((album) => album.isAll);
-          if(albumIndex == -1){
-            albumIndex = 0;
-          }
-          if(albums.isNotEmpty){
-            currentAlbum = albums[albumIndex];
-          }
-        });
-      });
-      setState(() {
-        didGivePermission = true;
-      });
-    } else {
-      setState(() {
-        didGivePermission = false;
-      });
+  @override
+  void dispose() {
+    if (_didStartChangeNotify) {
+      PhotoManager.removeChangeCallback(_onLibraryChanged);
+      PhotoManager.stopChangeNotify();
     }
+    _pagingController.dispose();
+    _thumbnailCache.dispose();
+    super.dispose();
   }
 
-  void changeAlbum(AssetPathEntity album, bool forceRefresh){
-    debugPrint("Change Album");
-    if (currentAlbum == album) {
-      debugPrint("SAME CHANGE ALBUM CALLED, IGNORING");
+  void _reportError(Object error) {
+    MediaPickerUtils.debugPrint("Error: $error");
+    widget.onReceiveError?.call(error);
+  }
+
+  Future<bool> _requestAccess() async {
+    final handler = widget.permissionHandler;
+    if (handler != null) {
+      return handler();
+    }
+    final state = await PhotoManager.requestPermissionExtend(
+      requestOption: PermissionRequestOption(
+        androidPermission: AndroidPermission(type: widget.requestType, mediaLocation: false),
+      ),
+    );
+    return state.hasAccess;
+  }
+
+  Future<void> _initPhotoManager() async {
+    bool hasAccess;
+    try {
+      hasAccess = await _requestAccess();
+    } catch (error) {
+      _reportError(error);
+      hasAccess = false;
+    }
+    if (!mounted) return;
+    if (!hasAccess) {
+      setState(() => didGivePermission = false);
       return;
     }
+    setState(() => didGivePermission = true);
+
+    PhotoManager.addChangeCallback(_onLibraryChanged);
+    PhotoManager.startChangeNotify();
+    _didStartChangeNotify = true;
+
+    final List<AssetPathEntity> paths;
+    try {
+      paths = await PhotoManager.getAssetPathList(hasAll: true, type: widget.requestType);
+    } catch (error) {
+      _reportError(error);
+      return;
+    }
+    if (!mounted) return;
     setState(() {
-      currentAlbum = album;
+      albums
+        ..clear()
+        ..addAll(paths);
+      if (paths.isNotEmpty) {
+        final allIndex = paths.indexWhere((album) => album.isAll);
+        currentAlbum = paths[allIndex == -1 ? 0 : allIndex];
+      }
     });
+  }
+
+  void _onLibraryChanged(MethodCall _) {
+    if (!mounted || currentAlbum == null) return;
     _pagingController.refresh();
   }
 
-
-  FutureOr<List<AssetEntity>> _fetchNextPage(int pageKey) {
-    debugPrint("Getting Next Page: $pageKey -> $currentAlbum");
-    var completer = Completer<List<AssetEntity>>();
-    currentAlbum?.getAssetListPaged(page:pageKey,size: widget.pageSize).then((assets){
-      debugPrint("GOT Assets: ${assets.length} -> ${_pagingController.hasNextPage}");
-      completer.complete(assets);
-    });
-    return completer.future;
+  void changeAlbum(AssetPathEntity album) {
+    if (currentAlbum == album) return;
+    setState(() => currentAlbum = album);
+    _pagingController.refresh();
   }
 
-  // void _initPagingController(){
-  //   _pagingController.addPageRequestListener((pageKey) {
-  //     if(requestedPages.contains(pageKey)){
-  //       MediaPickerUtils.debugPrint("Already Requested page:$pageKey for album: ${currentAlbum?.name}");
-  //       return;
-  //     }
-  //     requestedPages.add(pageKey);
-  //     currentAlbum?.getAssetListPaged(page:pageKey,size: widget.pageSize).then((assets){
-  //       if(assets.length < widget.pageSize){
-  //         _pagingController.appendLastPage(assets);
-  //       }else{
-  //         _pagingController.nextPageKey = pageKey + 1;
-  //         _pagingController.appendPage(assets, _pagingController.nextPageKey);
-  //       }
-  //     });
-  //   });
-  // }
-
-  void _showAlbumPicker(){
-    Navigator.of(context)
-        .push(MaterialPageRoute(builder: (context)=>ScreenAlbumPicker(selectedAlbum: currentAlbum, thumbnailCache: _thumbnailCache, requestType: widget.requestType,), fullscreenDialog: true))
-        .then((value){
-          if(value is AssetPathEntity){
-            changeAlbum(value, true);
-          }
-    });
+  Future<List<AssetEntity>> _fetchPage(int page) async {
+    final album = currentAlbum;
+    if (album == null) return [];
+    try {
+      return await album.getAssetListPaged(page: page, size: widget.pageSize);
+    } catch (error) {
+      _reportError(error);
+      rethrow;
+    }
   }
 
-  void _onSelectMedia(AssetEntity asset) async{
+  Future<void> _showAlbumPicker() async {
+    final album = await Navigator.of(context).push(
+      MaterialPageRoute<AssetPathEntity>(
+        builder: (_) => ScreenAlbumPicker(
+          selectedAlbum: currentAlbum,
+          thumbnailCache: _thumbnailCache,
+          localizedStrings: widget.localizedStrings,
+          requestType: widget.requestType,
+          onReceiveError: widget.onReceiveError,
+        ),
+        fullscreenDialog: true,
+      ),
+    );
+    if (album != null && mounted) {
+      changeAlbum(album);
+    }
+  }
+
+  void _onSelectMedia(AssetEntity asset) {
     if (widget.maxAssets == 1) {
       closeWithSelectedAssets([asset]);
-    } else {
-      if (selectedAssets.indexWhere((e) => e.id == asset.id) == -1) {
-        if (selectedAssets.length < widget.maxAssets) {
-          selectedAssets.add(asset);
-        }
-      } else {
-        selectedAssets.removeWhere((e) => e.id == asset.id);
-      }
-      setState(() {});
+      return;
     }
+    setState(() {
+      final index = selectedAssets.indexWhere((e) => e.id == asset.id);
+      if (index != -1) {
+        selectedAssets.removeAt(index);
+      } else if (selectedAssets.length < widget.maxAssets) {
+        selectedAssets.add(asset);
+      }
+    });
   }
 
-  void closeWithSelectedAssets(List<AssetEntity> assets) async{
-    bool doesNeedsDownloading = false;
-    for(int i = 0;i<assets.length; i++){
-      if((await assets[i].isLocallyAvailable()) == false){
-        doesNeedsDownloading = true;
+  /// Downloads any non-local (e.g. iCloud) originals, then pops with [assets].
+  /// On download failure the picker stays open so the user can retry.
+  Future<void> closeWithSelectedAssets(List<AssetEntity> assets) async {
+    if (_isClosing) return;
+    _isClosing = true;
+    final onDownload = widget.onDownloadMediaStateChanged;
+    var didStartDownload = false;
+    try {
+      final missing = <AssetEntity>[];
+      for (final asset in assets) {
+        if (!await asset.isLocallyAvailable(isOrigin: true)) {
+          missing.add(asset);
+        }
       }
-    }
-    if(!doesNeedsDownloading){
+      if (missing.isNotEmpty) {
+        MediaPickerUtils.debugPrint("Downloading ${missing.length} asset(s)");
+        didStartDownload = true;
+        onDownload?.call(MediaDownloadState.downloading, null);
+        await Future.wait(missing.map(_download));
+        onDownload?.call(MediaDownloadState.complete, null);
+      }
+      if (!mounted) return;
       Navigator.of(context).pop(assets);
-    }else{
-      MediaPickerUtils.debugPrint("There are medias that needs to be downloaded. Beginning Download");
-      if(widget.onDownloadMediaStateChanged != null){
-        widget.onDownloadMediaStateChanged!(MediaDownloadState.downloading,null);
+    } catch (error) {
+      MediaPickerUtils.debugPrint("Download failed: $error");
+      if (didStartDownload) {
+        onDownload?.call(MediaDownloadState.error, error);
+      } else {
+        _reportError(error);
       }
-      Future.wait(assets.map((e) => downloadAssetIfNeeded(e)))
-      .catchError((error){
-        MediaPickerUtils.debugPrint("Got error whlie downloading: $error");
-        if(widget.onDownloadMediaStateChanged != null){
-          widget.onDownloadMediaStateChanged!(MediaDownloadState.error,error);
-        }
-        return Future.value([]);
-      }).then((value){
-        if(widget.onDownloadMediaStateChanged != null){
-          widget.onDownloadMediaStateChanged!(MediaDownloadState.complete,null);
-        }
-        Navigator.of(context).pop(assets);
-      });
+      _isClosing = false;
     }
   }
 
-  Future<void> downloadAssetIfNeeded(AssetEntity asset) async{
-    var isLocallyAvailable =await asset.isLocallyAvailable();
-    if(!isLocallyAvailable){
-      MediaPickerUtils.debugPrint("Downloading asset: $asset");
-      var completer = Completer();
-      asset.loadFile(
-        isOrigin: true,
-      ).then((value){
-        MediaPickerUtils.debugPrint("Download complete: $asset");
-        completer.complete();
-      }).catchError((error){
-        completer.completeError(error);
-      });
-      return completer.future;
-    }else{
-      return Future.value();
+  Future<void> _download(AssetEntity asset) async {
+    final file = await asset.loadFile(isOrigin: true);
+    if (file == null) {
+      throw StateError("Could not load original file for asset ${asset.id}");
     }
   }
 
@@ -249,98 +240,116 @@ class ScreenMediaPickerState extends State<ScreenMediaPicker> {
     );
   }
 
-  AppBar get _appBar=>AppBar(
-    title: (albums.isEmpty) ? Container() :
-    GestureDetector(
-        onTap: _showAlbumPicker,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.keyboard_arrow_up),
-            Text(currentAlbum?.name ?? ""),
-          ],
-        )
-    ),
-    actions: widget.maxAssets == 1 ? null : [
-      TextButton(
-        onPressed: () => closeWithSelectedAssets(selectedAssets),
-        child: Text(
-          widget.localizedStrings?.add ?? "Add",
-          style: TextStyle(color: Theme.of(context).colorScheme.secondary),
-        ),
-      )
-    ],
-  );
-
-  Widget get _body =>
-      didGivePermission == null ?  _loading() :
-      didGivePermission! == false ? _noAccess() :
-      Container(
-    child: albums.isEmpty ? Container() : PagingListener(
-        controller: _pagingController,
-        builder: (context, state, fetchNextPage){
-          debugPrint("State: ${state.isLoading}, ${state.hasNextPage}, ${state.status}");
-          return PagedGridView(
-              state: state,
-              fetchNextPage: fetchNextPage,
-              builderDelegate: PagedChildBuilderDelegate<AssetEntity>(
-                itemBuilder: (context, item, index) => _assetThumbnail(item),
+  AppBar get _appBar => AppBar(
+    title: albums.isEmpty
+        ? null
+        : GestureDetector(
+            onTap: _showAlbumPicker,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.keyboard_arrow_up),
+                Flexible(child: Text(currentAlbum?.name ?? "", overflow: TextOverflow.ellipsis)),
+              ],
+            ),
+          ),
+    actions: widget.maxAssets == 1
+        ? null
+        : [
+            TextButton(
+              onPressed: () => closeWithSelectedAssets(List.of(selectedAssets)),
+              child: Text(
+                widget.localizedStrings?.add ?? "Add",
+                style: TextStyle(color: Theme.of(context).colorScheme.secondary),
               ),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: widget.crossAxisCount,
-              )
-          );
-        }
-    )
+            ),
+          ],
   );
 
-  Widget _loading(){
-    return const Center(child: CircularProgressIndicator(),);
+  Widget get _body {
+    if (didGivePermission == null) return _loading();
+    if (didGivePermission == false) return _noAccess();
+    if (albums.isEmpty) return const SizedBox.shrink();
+    return PagingListener(
+      controller: _pagingController,
+      builder: (context, state, fetchNextPage) => PagedGridView<int, AssetEntity>(
+        state: state,
+        fetchNextPage: fetchNextPage,
+        builderDelegate: PagedChildBuilderDelegate<AssetEntity>(
+          itemBuilder: (context, item, index) => _assetThumbnail(item),
+        ),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: widget.crossAxisCount,
+        ),
+      ),
+    );
   }
 
-  Widget _noAccess(){
+  Widget _loading() {
+    return const Center(child: CircularProgressIndicator());
+  }
+
+  Widget _noAccess() {
     return Center(
-      child: Column(
-        children: [
-          Text(widget.localizedStrings?.noPermissionTitle ?? "Cannot access to library", style: Theme.of(context).textTheme.titleMedium,),
-          const SizedBox(height: 8,),
-          Text(widget.localizedStrings?.noPermissionDescription ?? "You must give permission in order to pick photos.\nPlease give permission from settings ",),
-          const SizedBox(height: 8,),
-          ElevatedButton(onPressed: () async{
-            Navigator.of(context).pop();
-            await PhotoManager.openSetting();
-          }, child: Text(widget.localizedStrings?.openSettings ?? "Open Settings"))
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              widget.localizedStrings?.noPermissionTitle ?? "Cannot access to library",
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              widget.localizedStrings?.noPermissionDescription ??
+                  "You must give permission in order to pick photos.\nPlease give permission from settings",
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                PhotoManager.openSetting();
+              },
+              child: Text(widget.localizedStrings?.openSettings ?? "Open Settings"),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _assetThumbnail(AssetEntity asset) {
-    var width = MediaQuery.of(context).size.width / widget.crossAxisCount;
+    final width = MediaQuery.sizeOf(context).width / widget.crossAxisCount;
     return Padding(
+      key: ValueKey(asset.id),
       padding: const EdgeInsets.all(0.5),
       child: GridTile(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                  child: WidgetAssetImage(
-                    size: Size(width, width),
-                    asset: asset,
-                    onTap: () => _onSelectMedia(asset),
-                    thumbnailCache: _thumbnailCache,
-                  )),
-              Positioned(
-                top: 4,
-                left: 8,
-                child: _getCount(asset),
-              )
-            ],
-          )),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: WidgetAssetImage(
+                size: Size(width, width),
+                asset: asset,
+                onTap: () => _onSelectMedia(asset),
+                thumbnailCache: _thumbnailCache,
+              ),
+            ),
+            Positioned(
+              top: 4,
+              left: 8,
+              child: _getCount(asset),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _getCount(AssetEntity asset) {
-    var index = selectedAssets.indexWhere((e) => e.id == asset.id);
+    final index = selectedAssets.indexWhere((e) => e.id == asset.id);
     return IgnorePointer(
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 150),
@@ -350,17 +359,16 @@ class ScreenMediaPickerState extends State<ScreenMediaPicker> {
           height: 30,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.secondary,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 1.5)),
-          child: Text(index == -1 ? "" : (index + 1).toString(),
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w400,),
+            color: Theme.of(context).colorScheme.secondary,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 1.5),
+          ),
+          child: Text(
+            index == -1 ? "" : (index + 1).toString(),
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
           ),
         ),
       ),
     );
   }
 }
-
