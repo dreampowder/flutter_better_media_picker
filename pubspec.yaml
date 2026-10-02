@@ -1,6 +1,6 @@
 name: flutter_better_media_picker
 description: A paged photo and video picker for Flutter built on photo_manager, with album switching, multi-selection and iCloud download handling.
-version: 0.1.0
+version: 1.0.0
 homepage: https://github.com/dreampowder/flutter_better_media_picker
 
 environment:
